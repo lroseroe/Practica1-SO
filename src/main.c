@@ -1,8 +1,8 @@
 #include <stdio.h>
+#include "UI.h"
 
 int main() {
-    printf("Testeando Práctica 1...\n");
-
+    menuPrincipal();
 
     return 0;
 }
