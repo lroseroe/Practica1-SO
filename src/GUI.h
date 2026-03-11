@@ -1,5 +1,5 @@
-#ifndef INTERFACE_H //Si no se ha definido la libreria...
-#define INTERFACE_H //Se define
+#ifndef GUI_H //Si no se ha definido la libreria...
+#define GUI_H //Se define
 
 #define MAX_STRING_LEN 370
 #define MAX_LINK_LEN 1024
@@ -23,7 +23,6 @@ struct videojuego {
     char description[MAX_TEXT_LEN]; //41
 };
 
-int menuPrincipal(void);
 
 
 #endif

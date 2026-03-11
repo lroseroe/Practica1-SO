@@ -3,7 +3,7 @@
 #include <errno.h>
 #include <string.h>
 #include <stdbool.h>
-#include "UI.h"
+#include "GUI.h"
 
 #define MAX_LINE_LEN 8192
 

@@ -1,10 +1,11 @@
 CC=gcc
-CFLAGS=-Wall -Wextra -std=c11
+CFLAGS=-Wall -Wextra -std=c11 `pkg-config --cflags gtk4`
+LIBS=`pkg-config --libs gtk4`
 
 all: programa
 
-programa: src/main.c src/UI.c src/CSV.c
-	$(CC) $(CFLAGS) src/main.c src/UI.c src/CSV.c -o programa
+programa: src/CSV.c src/GUI.c
+	$(CC) $(CFLAGS) src/CSV.c src/GUI.c -o programa $(LIBS)
 
 clean:
 	rm -f programa
