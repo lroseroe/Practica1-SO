@@ -76,7 +76,7 @@ static void insertarBuild(BuildHashMap *hm, const char *key, uint32_t offset){
     BuildNode *cur = hm->buckets[idx];
 
     while(cur){
-        if(strcmp(cur->key, key) == 0){
+        if(strcmp(cur->key, key) == 0){ //Comparar strings
             offsetVecPush(&cur->offsets, offset);
             return;
         }
@@ -100,6 +100,7 @@ static void insertarBuild(BuildHashMap *hm, const char *key, uint32_t offset){
     offsetVecInit(&nuevo->offsets);
     offsetVecPush(&nuevo->offsets, offset);
 
+    //Insertar al inicio
     nuevo->next = hm->buckets[idx];
     hm->buckets[idx] = nuevo;
     hm->size++;
@@ -113,7 +114,7 @@ static void construirIndiceName(BuildHashMap *hm, const char *rutaCSV){
         exit(EXIT_FAILURE);
     }
 
-    char linea[MAX_LINEA];
+    char linea[MAX_LINE_LEN];
 
     /* saltar header */
     if(!fgets(linea, sizeof(linea), f)){
@@ -127,7 +128,7 @@ static void construirIndiceName(BuildHashMap *hm, const char *rutaCSV){
 
         if(!fgets(linea, sizeof(linea), f)) break;
 
-        char name[MAX_NAME];
+        char name[MAX_STRING_LEN];
         if(extraerCampoCSV(linea, COL_NAME, name, sizeof(name))){
             normalizarCadena(name);
 
@@ -242,15 +243,10 @@ static void guardarIndiceBinario(BuildHashMap *hm, const char *rutaDir, const ch
     fclose(fidx);
 }
 
-int main(int argc, char **argv){
-    if(argc != 4){
-        fprintf(stderr, "Uso: %s <rawg-games-dataset.csv> <name_dir.bin> <name_index.bin>\n", argv[0]);
-        return 1;
-    }
-
+int main(){
     BuildHashMap *hm = crearBuildMap();
-    construirIndiceName(hm, argv[1]);
-    guardarIndiceBinario(hm, argv[2], argv[3]);
+    construirIndiceName(hm, CSV_FILE);
+    guardarIndiceBinario(hm, DIR_NAME_FILE, IDX_NAME_FILE);
     liberarBuildMap(hm);
 
     printf("Indice por name construido correctamente.\n");

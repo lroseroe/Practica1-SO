@@ -2,16 +2,57 @@
 #include <stdbool.h>
 #include <string.h>
 #include <stdlib.h>
-#include <ctype.h>
-#include <gtk/gtk.h>
+#include <errno.h>
+#include <gtk/gtk.h> //GUI
+#include <unistd.h> //Para read/write
+#include <fcntl.h> //Para open
+#include "common.h"
+
+//Tuberías con nombre
+int fd_query, fd_response;
 
 typedef struct {
     GtkWidget *window;
     GtkWidget *name_entry;
     GtkWidget *publ_entry;
     GtkWidget *result_list; //Para mostrar resultados en una lista
+
+    Videojuego *results;
+    int result_count;
+
+    GtkWidget *name_lbl;
+    GtkWidget *release_date_lbl;
+    GtkWidget *background_image_lbl;
+    GtkWidget *rating_lbl;
+    GtkWidget *ratings_count_lbl;
+    GtkWidget *added_lbl;
+    GtkWidget *playtime_lbl;
+    GtkWidget *reviews_count_lbl;
+    GtkWidget *platforms_lbl;
+    GtkWidget *stores_lbl;
+    GtkWidget *developers_lbl;
+    GtkWidget *genres_lbl;
+    GtkWidget *publishers_lbl;
+    GtkWidget *website_lbl;
+    GtkWidget *description_lbl;
 } searchWidgets;
 
+char *stringArrayToString(char arr[][MAX_STRING_LEN], int n){
+    GString *result = g_string_new("");
+
+    for(int i = 0; i < n; i++){
+        if(arr[i][0] == '\0')
+            break;
+
+        g_string_append(result, arr[i]);
+
+        if(i != n - 1 && arr[i + 1][0] != '\0'){
+            g_string_append(result, ", ");
+        }
+    }
+
+    return g_string_free(result, FALSE); 
+}
 
 static void showError(GtkWindow *parent, const char *message){
     GtkAlertDialog *dialog;
@@ -19,43 +60,170 @@ static void showError(GtkWindow *parent, const char *message){
     gtk_alert_dialog_show(dialog, parent);
 }
 
+static void mostrarDetalles(GtkListBox *box, GtkListBoxRow *row, gpointer user_data){
+    if(!row) return;
+    searchWidgets *widgets = user_data;
+    char *text; //String auxiliar para mostrar info en pantalla
+    Videojuego *vjuego = g_object_get_data(G_OBJECT(row), "game-data");
+    if(!vjuego) return;
+
+    //g_strdup_printf() aloca nueva memoria para el string deseado
+    text = g_strdup_printf("Nombre: %s", vjuego->name);
+    gtk_label_set_text(GTK_LABEL(widgets->name_lbl), text);
+    g_free(text);
+
+    text = g_strdup_printf("Fecha de lanzamiento: %s", vjuego->release_date);
+    gtk_label_set_text(GTK_LABEL(widgets->release_date_lbl), text);
+    g_free(text);
+
+    text = g_strdup_printf("Imagen de fondo: %s", vjuego->background_image);
+    gtk_label_set_text(GTK_LABEL(widgets->background_image_lbl), text);
+    g_free(text);
+
+    text = g_strdup_printf("Calificación: %.2f", vjuego->rating);
+    gtk_label_set_text(GTK_LABEL(widgets->rating_lbl), text);
+    g_free(text);
+
+    text = g_strdup_printf("Cantidad de calificaciones: %i", vjuego->ratings_count);
+    gtk_label_set_text(GTK_LABEL(widgets->ratings_count_lbl), text);
+    g_free(text);
+
+    text = g_strdup_printf("Cantidad de jugadores: %i", vjuego->added);
+    gtk_label_set_text(GTK_LABEL(widgets->added_lbl), text);
+    g_free(text);
+
+    text = g_strdup_printf("Tiempo jugado (Horas): %i", vjuego->playtime);
+    gtk_label_set_text(GTK_LABEL(widgets->playtime_lbl), text);
+    g_free(text);
+
+    text = g_strdup_printf("Cantidad de reseñas: %i", vjuego->reviews_count);
+    gtk_label_set_text(GTK_LABEL(widgets->reviews_count_lbl), text);
+    g_free(text);
+
+    text = g_strdup_printf("Plataformas: %s", stringArrayToString(vjuego->platforms, MAX_CANT));
+    gtk_label_set_text(GTK_LABEL(widgets->platforms_lbl), text);
+    g_free(text);
+
+    text = g_strdup_printf("Tiendas: %s", stringArrayToString(vjuego->stores, MAX_CANT));
+    gtk_label_set_text(GTK_LABEL(widgets->stores_lbl), text);
+    g_free(text);
+
+    text = g_strdup_printf("Desarrolladores: %s", stringArrayToString(vjuego->developers, MAX_CANT));
+    gtk_label_set_text(GTK_LABEL(widgets->developers_lbl), text);
+    g_free(text);
+
+    text = g_strdup_printf("Generos: %s", stringArrayToString(vjuego->genres, MAX_CANT));
+    gtk_label_set_text(GTK_LABEL(widgets->genres_lbl), text);
+    g_free(text);
+
+    text = g_strdup_printf("Distribuidoras: %s", stringArrayToString(vjuego->publishers, MAX_CANT));
+    gtk_label_set_text(GTK_LABEL(widgets->publishers_lbl), text);
+    g_free(text);
+
+    text = g_strdup_printf("Sitio web: %s", vjuego->website);
+    gtk_label_set_text(GTK_LABEL(widgets->website_lbl), text);
+    g_free(text);
+
+    text = g_strdup_printf("Descripción: %s", vjuego->description);
+    gtk_label_set_text(GTK_LABEL(widgets->description_lbl), text);
+    g_free(text);
+    
+}
+
 static void search_cb(GtkButton *btn, gpointer user_data){
     searchWidgets *widgets = user_data;
     GtkWidget *row;
     GtkWidget *name_lbl;
+    Query q_name;
+    Query q_publ;
+    int r, count;
+
+    GtkWidget *window = widgets->window;
+    GtkWidget *result_list = widgets-> result_list;
+    widgets->results = NULL;
+    widgets->result_count = 0;
+
+    //Limpiar lista en cada búsqueda y liberar memoria  
+    gtk_list_box_remove_all(GTK_LIST_BOX(result_list)); 
+    if(widgets->results){
+        g_free(widgets->results);
+        widgets->results = NULL;
+    }
+
+    //Alocar nueva memoria 
+    widgets->results = g_malloc(sizeof(Videojuego) * MAX_RESULTS);
+    if(!(widgets->results)){
+        perror("Error alocando memoria");
+        exit(-1);
+    }
+
+    Videojuego *results = widgets->results;
 
     const char *name_ent = gtk_editable_get_text(GTK_EDITABLE(widgets->name_entry));
     const char *publ_ent = gtk_editable_get_text(GTK_EDITABLE(widgets->publ_entry));
-
+    
     char *name = g_strdup(name_ent); //Hacemos una copia mutable
     g_strstrip(name);
     char *publ = g_strdup(publ_ent);
     g_strstrip(publ);
 
     if(strlen(name) == 0 && strlen(publ) == 0){
-        showError(GTK_WINDOW(widgets -> window), "Ingrese al menos un criterio de búsqueda");
+        showError(GTK_WINDOW(window), "Ingrese al menos un criterio de búsqueda");
+        g_free(name);
+        g_free(publ);
+        return;
     }
 
     if(strlen(name) > 0){
-
-        //Realizar busqueda por nombre
+        //Solicitar busqueda por nombre
+        q_name.type = 0;
+        strcpy(q_name.criteria, name);
         
-        name_lbl = gtk_label_new("Test");
+        r = write(fd_query, &q_name, sizeof(q_name));
+        if(r < 0){
+            perror("Error escribiendo en fifo_query");
+            exit(-1);
+        }
+
+    } else if(strlen(publ) > 0){
+        q_publ.type = 1;
+        strcpy(q_publ.criteria, publ);
+        
+        r = write(fd_query, &q_publ, sizeof(q_publ));
+        if(r < 0){
+            perror("Error escribiendo en fifo_query");
+            exit(-1);
+        }
+    }
+    readFull(fd_response, &count, sizeof(int));
+ 
+    if(count == 0){
+        showError(GTK_WINDOW(widgets -> window), "No se encontraron resultados");
+        g_free(name);
+        g_free(publ);
+        return;   
+    } 
+
+    readFull(fd_response, results, count * sizeof(Videojuego));
+
+    /*NOTA. El buffer de la tubería es de solo 65536 bytes,
+    así que debemos recibir los resultados por partes
+    */
+
+    //Mostrar resultados encontrados en pantalla
+    
+    for(int i = 0; i < count; i++){
+        name_lbl = gtk_label_new(results[i].name); 
         row = gtk_list_box_row_new();
 
         gtk_list_box_row_set_child(GTK_LIST_BOX_ROW(row), name_lbl);
-        gtk_list_box_append(GTK_LIST_BOX(widgets -> result_list), row);
+        gtk_list_box_append(GTK_LIST_BOX(result_list), row);
 
-    } else if(strlen(publ) > 0){
-
-        //Realizar busqueda por distribuidora
+        //Asociar cada fila con su struct Videojuego correspondiente
+        g_object_set_data(G_OBJECT(row), "game-data", &results[i]);
     }
 
-    g_print("%li\n",strlen(name));
-    g_print("%li\n",strlen(publ));
-
-    g_print("Nombre: %s\n", name);
-    g_print("Distribuidora: %s\n", publ);
+    widgets->result_count = count;
 
     //Liberar memoria 
     g_free(name);
@@ -71,6 +239,7 @@ static void activate(GtkApplication *app){
     GtkWidget *search_btn; //Ejecutar la busqueda
     GtkWidget *paned; //Para dividir la ventana
     GtkWidget *result_list; //Mostrar resultados encontrados
+    GtkWidget *result_list_scroll;
     GtkWidget *details_box; //Mostrar detalles de un resultado
     GtkWidget *details_scroll;
 
@@ -93,11 +262,10 @@ static void activate(GtkApplication *app){
     searchWidgets *s_widgets = g_malloc(sizeof(searchWidgets));
 
     window = gtk_application_window_new (app);
-    gtk_window_set_title (GTK_WINDOW (window), "Sistema de Búsqueda");
-    gtk_window_set_default_size (GTK_WINDOW (window), 800, 500);
+    gtk_window_set_title (GTK_WINDOW (window), "Buscador de Videojuegos");
+    gtk_window_set_default_size (GTK_WINDOW (window), 1000, 600);
 
     main_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 5);
-    gtk_box_set_homogeneous (GTK_BOX (main_box), FALSE);
     gtk_window_set_child (GTK_WINDOW (window), main_box);
     
     search_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 5);
@@ -123,9 +291,6 @@ static void activate(GtkApplication *app){
     gtk_box_append(GTK_BOX(search_box), search_btn);
 
     // Widgets de paned
-    result_list = gtk_list_box_new();
-    s_widgets -> result_list = result_list;
-
     details_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 7);
     details_scroll = gtk_scrolled_window_new();
     gtk_widget_set_hexpand(details_scroll, TRUE);
@@ -137,22 +302,61 @@ static void activate(GtkApplication *app){
     gtk_widget_set_margin_top(details_box, 12);
     gtk_widget_set_margin_bottom(details_box, 12);
 
+    result_list = gtk_list_box_new();
+    s_widgets -> result_list = result_list;
+    //Para mostrar detalles al seleccionar un resultado
+    g_signal_connect(result_list, "row-selected", G_CALLBACK(mostrarDetalles), s_widgets); 
+    result_list_scroll = gtk_scrolled_window_new();
+    gtk_widget_set_hexpand(result_list_scroll, TRUE);
+    gtk_widget_set_vexpand(result_list_scroll, TRUE);
 
-    name_lbl = gtk_label_new("Nombre: ");
-    release_date_lbl = gtk_label_new("Fecha de lanzamiento: ");
-    background_image_lbl = gtk_label_new("Imagen de fondo: ");
-    rating_lbl = gtk_label_new("Calificación: ");
-    ratings_count_lbl = gtk_label_new("Cantidad de calificaciones: ");
-    added_lbl = gtk_label_new("Cantidad de jugadores: ");
-    playtime_lbl = gtk_label_new("Duración (Horas): ");
-    reviews_count_lbl = gtk_label_new("Cantidad de reseñas: ");
-    platforms_lbl = gtk_label_new("Plataformas: ");
-    stores_lbl = gtk_label_new("Tiendas: ");
-    developers_lbl = gtk_label_new("Desarrolladores: ");
-    genres_lbl = gtk_label_new("Genero: ");
-    publishers_lbl = gtk_label_new("Distribuidores: ");
-    website_lbl = gtk_label_new("Sitio web: ");
-    description_lbl = gtk_label_new("Descripción: ");
+    name_lbl = gtk_label_new("");
+    s_widgets -> name_lbl = name_lbl;
+
+    release_date_lbl = gtk_label_new("");
+    s_widgets -> release_date_lbl = release_date_lbl;
+
+    background_image_lbl = gtk_label_new("");
+    gtk_label_set_wrap(GTK_LABEL(background_image_lbl), TRUE);
+    s_widgets -> background_image_lbl = background_image_lbl;
+
+    rating_lbl = gtk_label_new("");
+    s_widgets -> rating_lbl = rating_lbl;
+
+    ratings_count_lbl = gtk_label_new("");
+    s_widgets -> ratings_count_lbl = ratings_count_lbl;
+
+    added_lbl = gtk_label_new("");
+    s_widgets -> added_lbl = added_lbl;
+
+    playtime_lbl = gtk_label_new("");
+    s_widgets -> playtime_lbl = playtime_lbl;
+
+    reviews_count_lbl = gtk_label_new("");
+    s_widgets -> reviews_count_lbl = reviews_count_lbl;
+
+    platforms_lbl = gtk_label_new("");
+    gtk_label_set_wrap(GTK_LABEL(platforms_lbl), TRUE);
+    s_widgets -> platforms_lbl = platforms_lbl;
+
+    stores_lbl = gtk_label_new("");
+    s_widgets -> stores_lbl = stores_lbl;
+
+    developers_lbl = gtk_label_new("");
+    s_widgets -> developers_lbl = developers_lbl;
+
+    genres_lbl = gtk_label_new("");
+    s_widgets -> genres_lbl = genres_lbl;
+
+    publishers_lbl = gtk_label_new("");
+    s_widgets -> publishers_lbl = publishers_lbl;
+
+    website_lbl = gtk_label_new("");
+    s_widgets -> website_lbl = website_lbl;
+    
+    description_lbl = gtk_label_new("");
+    gtk_label_set_wrap(GTK_LABEL(description_lbl), TRUE);
+    s_widgets -> description_lbl = description_lbl;
 
     gtk_box_append(GTK_BOX(details_box), name_lbl);
     gtk_box_append(GTK_BOX(details_box), release_date_lbl);
@@ -200,11 +404,14 @@ static void activate(GtkApplication *app){
     gtk_label_set_xalign(GTK_LABEL(website_lbl), 0.0);
     gtk_widget_set_halign(description_lbl, GTK_ALIGN_START);
     gtk_label_set_xalign(GTK_LABEL(description_lbl), 0.0);
-    
-    gtk_paned_set_start_child(GTK_PANED(paned), result_list);
+
     gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(details_scroll), details_box);
+    gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(result_list_scroll), result_list);
+    gtk_paned_set_start_child(GTK_PANED(paned), result_list_scroll);
     gtk_paned_set_end_child(GTK_PANED(paned), details_scroll);
 
+    gtk_paned_set_position(GTK_PANED(paned), 450); //Definir posición de la separación
+    
     gtk_box_append(GTK_BOX(main_box), search_box);
     gtk_box_append(GTK_BOX(main_box), paned);
     gtk_window_present(GTK_WINDOW (window));
@@ -216,12 +423,21 @@ int main(int argc, char **argv){
     GtkApplication *app;
     int status;
 
-    app = gtk_application_new ("ui.gtk.practica", G_APPLICATION_DEFAULT_FLAGS);
+    fd_query = open("/tmp/fifo_query", O_WRONLY);
+    if(fd_query < 0){
+        perror("Error abriendo fifo_query");
+    }
+
+    fd_response = open("/tmp/fifo_response", O_RDONLY);
+    if(fd_response < 0){
+        perror("Error abriendo fifo_response");
+    }
+
+    app = gtk_application_new ("ui.gtk.practica1", G_APPLICATION_DEFAULT_FLAGS);
     g_signal_connect (app, "activate", G_CALLBACK (activate), NULL);
     status = g_application_run (G_APPLICATION (app), argc, argv);
 
     g_object_unref(app); //Liberar app
-
     return status;
 }
 

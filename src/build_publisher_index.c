@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 
 /* Hashmap temporal para construir el índice */
 typedef struct {
@@ -112,7 +113,7 @@ static void construirIndicePublisher(BuildHashMap *hm, const char *rutaCSV){
         exit(EXIT_FAILURE);
     }
 
-    char linea[MAX_LINEA];
+    char linea[MAX_LINE_LEN];
 
     /* saltar header */
     if(!fgets(linea, sizeof(linea), f)){
@@ -126,14 +127,14 @@ static void construirIndicePublisher(BuildHashMap *hm, const char *rutaCSV){
 
         if(!fgets(linea, sizeof(linea), f)) break;
 
-        char campoPublishers[MAX_PUBLISHER * 8];
+        char campoPublishers[MAX_STRING_LEN * 8];
 
         if(extraerCampoCSV(linea, COL_PUBLISHERS, campoPublishers, sizeof(campoPublishers))){
             normalizarCadena(campoPublishers);
 
             if(campoPublishers[0] != '\0'){
-                char publishers[64][MAX_PUBLISHER];
-                int n = dividirPublishers(campoPublishers, publishers, 64);
+                char publishers[MAX_CANT][MAX_STRING_LEN];
+                int n = dividirCampo(campoPublishers, publishers, MAX_CANT, true);
 
                 for(int i = 0; i < n; i++){
                     if(publishers[i][0] != '\0'){
@@ -236,15 +237,10 @@ static void guardarIndiceBinario(BuildHashMap *hm, const char *rutaDir, const ch
     fclose(fidx);
 }
 
-int main(int argc, char **argv){
-    if(argc != 4){
-        fprintf(stderr, "Uso: %s <rawg-games-dataset.csv> <publisher_dir.bin> <publisher_index.bin>\n", argv[0]);
-        return 1;
-    }
-
+int main(){
     BuildHashMap *hm = crearBuildMap();
-    construirIndicePublisher(hm, argv[1]);
-    guardarIndiceBinario(hm, argv[2], argv[3]);
+    construirIndicePublisher(hm, CSV_FILE);
+    guardarIndiceBinario(hm, DIR_PUBL_FILE, IDX_PUBL_FILE);
     liberarBuildMap(hm);
 
     printf("Indice por publisher construido correctamente.\n");

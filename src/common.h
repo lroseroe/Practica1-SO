@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <stdio.h>
+#include <stdbool.h>
 
 /* Cantidad de buckets del hash.
    65536 = 2^16, buen balance entre memoria y colisiones */
@@ -11,20 +13,52 @@
 /* Valor especial para indicar que un bucket no tiene entradas */
 #define INVALID_OFFSET 0xFFFFFFFFU
 
-/* Tamaño máximo de línea leída del CSV */
-#define MAX_LINEA 65536
-
-/* Tamaño máximo esperado para el campo name */
-#define MAX_NAME 2048
-
-/* Tamaño máximo esperado para el campo publisher */
-#define MAX_PUBLISHER 2048
-
 /* Columna del CSV donde está "name" */
 #define COL_NAME 2
 
 /* Columna del CSV donde está "publishers" */
 #define COL_PUBLISHERS 21
+
+#define MAX_STRING_LEN 256 //Nombre, desarrollador, etc
+#define MAX_LINK_LEN 1024 
+#define MAX_TEXT_LEN 4096 //Para descripciones
+#define MAX_LINE_LEN 8192 
+
+#define MAX_RESULTS 2048 //Máxima cantidad de resultados que podemos obtener en una busqueda 
+#define MAX_CANT 16 
+
+typedef struct {
+    char name[MAX_STRING_LEN]; // 2
+    char release_date[15]; //Formato YYYY-MM-DD 3
+    char background_image[MAX_LINK_LEN]; // 4
+    float rating; // 5 
+    int ratings_count; // 7
+    int added; // 9 
+    int playtime; // 10
+    int reviews_count; //13
+    char platforms[MAX_CANT][MAX_STRING_LEN]; //16
+    char stores[MAX_CANT][MAX_STRING_LEN]; //17
+    char developers[MAX_CANT][MAX_STRING_LEN]; //18
+    char genres[MAX_CANT][MAX_STRING_LEN]; //19
+    char publishers[MAX_CANT][MAX_STRING_LEN]; //21
+    char website[MAX_LINK_LEN]; //32
+    char description[MAX_TEXT_LEN]; //41
+} Videojuego;
+
+/*
+Es necesario especificar si queremos buscar por nombre (tipo 0) o por
+distribuidora (tipo 1) al hacer una solicitud
+*/
+typedef struct{
+    int type; //0 para n
+    char criteria[MAX_STRING_LEN];
+} Query;
+
+#define CSV_FILE "dataset/rawg-games-dataset.csv"
+#define DIR_NAME_FILE "index/name_dir.bin"
+#define IDX_NAME_FILE "index/name_index.bin"
+#define DIR_PUBL_FILE "index/publisher_dir.bin"
+#define IDX_PUBL_FILE "index/publisher_index.bin"
 
 /* Vector dinámico de offsets.
    Reemplaza la lista enlazada de offsets para ahorrar memoria
@@ -53,6 +87,14 @@ typedef struct {
     uint32_t countOffsets;   /* cantidad de offsets asociados */
 } DiskEntryHeader;
 
+/*Struct que retornarán las funciones de búsqueda 
+   positions : Resultados encontrados (posiciones en CSV)
+   size : Cantidad de resultados encontrados */
+typedef struct{
+    uint32_t *positions;
+    uint32_t size;
+} OffsetList;
+
 /* Función hash para strings */
 unsigned long hashString(const char *str, unsigned long B);
 
@@ -70,6 +112,12 @@ int extraerCampoCSV(const char *linea, int indiceCampo, char *salida, size_t max
 /* Procesa el campo publishers y llama callback por cada publisher encontrado */
 void procesarPublishers(const char *campo, void (*callback)(const char*, uint32_t, void*), uint32_t offset, void *ctx);
 
-int dividirPublishers(const char *campo, char publishers[][MAX_PUBLISHER], int maxPublishers);
+int dividirCampo(const char *campo, char arr[][MAX_STRING_LEN], int max, bool normal);
+
+Videojuego getRegisterFromCSV(uint32_t position, FILE *file);
+
+void writeFull(int fd, void *buf, size_t size);
+
+void readFull(int fd, void *buf, size_t size);
 
 #endif
