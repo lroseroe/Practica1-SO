@@ -34,7 +34,7 @@ Considerando el dataset utilizado, utilizamos dos criterios de bùsqueda,
 Es claro que en nuestro caso, el nombre es el criterio de búsqueda más utilizado en buscadores reales, pues es único e identificable para cada juego en el dataset. 
 
 ### Publisher
-Nótese que un juego puede tener varias distribuidoras y una distribuidora ser responsable por varios juegos, sin embargo, tras estudiar el dataset encontramos que un juego generalmente tiene una sola distribuidora, y en caso de tener más, la primera que aparece en el campo es la más reconocida. Teniendo en cuenta lo anterior, decidimos utilizar a la distribuidora principal de un juego como otro criterio de búsqueda relevante.
+Nótese que un juego puede tener varias distribuidoras y una distribuidora ser responsable por varios juegos, sin embargo, tras estudiar el dataset encontramos que un juego generalmente tiene una sola distribuidora, y en caso de tener más, suelen ser bastante pocas. Teniendo en cuenta lo anterior, añadimos el criterio de búsqueda por distribuidora, que retorna todos los juegos donde dicha distribuidora aparezca.
 
 Nota. Tanto para el criterio de _Name_ como para _Publisher_ aceptamos cadenas con mayúsculas/minúsculas, espacios y caracteres especiales; siempre y cuando consten de 1 a 256 caracteres.
 
